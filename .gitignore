@@ -15,3 +15,5 @@ Thumbs.db
 # Environment
 .env
 application.properties
+
+/public/image/
