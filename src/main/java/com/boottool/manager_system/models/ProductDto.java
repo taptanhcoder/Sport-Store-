@@ -1,108 +1,66 @@
 package com.boottool.manager_system.models;
 
-import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.Date;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
 
 public class ProductDto {
 
-
-    private int id;
-    private Date createdAt;
+    private Long id;
+    private LocalDateTime createdAt;
     private String imageFileName;
 
-
-    @NotEmpty(message = "The name is required")
+    /* ------------ VALIDATION ------------ */
+    @NotBlank(message = "The name is required")
     private String name;
 
-    @NotEmpty(message = "The brand is required")
+    @NotBlank(message = "The brand is required")
     private String brand;
 
-    @NotEmpty(message = "The category is required")
+    @NotBlank(message = "The category is required")
     private String category;
 
-    @Min(value = 0, message = "The price must be greater than or equal to 0")
-    private double price;
+    @NotNull(message = "The price is required")
+    @DecimalMin(value = "0.0", inclusive = true,
+            message = "The price must be ≥ 0")
+    private BigDecimal price;
 
-    @Size(min = 10, max = 2000, message = "The description must be between 10 and 2000 characters")
+    @Size(min = 10, max = 2000,
+            message = "The description must be between 10 and 2000 characters")
     private String description;
 
-
+    /* File upload (không đánh dấu @NotNull vì sẽ được kiểm tra thủ công) */
     private MultipartFile imageFile;
 
+    /* ------------ GETTERS / SETTERS ------------ */
 
-    public int getId() {
-        return id;
-    }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
-    public void setId(int id) {
-        this.id = id;
-    }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 
-    public Date getCreatedAt() {
-        return createdAt;
-    }
+    public String getImageFileName() { return imageFileName; }
+    public void setImageFileName(String imageFileName) { this.imageFileName = imageFileName; }
 
-    public void setCreatedAt(Date createdAt) {
-        this.createdAt = createdAt;
-    }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
-    public String getImageFileName() {
-        return imageFileName;
-    }
+    public String getBrand() { return brand; }
+    public void setBrand(String brand) { this.brand = brand; }
 
-    public void setImageFileName(String imageFileName) {
-        this.imageFileName = imageFileName;
-    }
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
 
-    public String getName() {
-        return name;
-    }
+    public BigDecimal getPrice() { return price; }
+    public void setPrice(BigDecimal price) { this.price = price; }
 
-    public void setName(String name) {
-        this.name = name;
-    }
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
 
-    public String getBrand() {
-        return brand;
-    }
-
-    public void setBrand(String brand) {
-        this.brand = brand;
-    }
-
-    public String getCategory() {
-        return category;
-    }
-
-    public void setCategory(String category) {
-        this.category = category;
-    }
-
-    public double getPrice() {
-        return price;
-    }
-
-    public void setPrice(double price) {
-        this.price = price;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public MultipartFile getImageFile() {
-        return imageFile;
-    }
-
-    public void setImageFile(MultipartFile imageFile) {
-        this.imageFile = imageFile;
-    }
+    public MultipartFile getImageFile() { return imageFile; }
+    public void setImageFile(MultipartFile imageFile) { this.imageFile = imageFile; }
 }

@@ -1,7 +1,8 @@
 package com.boottool.manager_system.models;
 
 import jakarta.persistence.*;
-import java.util.Date;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "PRODUCTS")
@@ -10,48 +11,98 @@ public class Product {
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "product_seq_gen")
     @SequenceGenerator(name = "product_seq_gen", sequenceName = "PRODUCT_SEQ", allocationSize = 1)
-    private int id;
+    private Long id;
 
     private String name;
     private String brand;
     private String category;
-    private double price;
+
+    @Column(precision = 19, scale = 4, nullable = false)
+    private BigDecimal price;
 
     @Column(columnDefinition = "CLOB")
     private String description;
 
-    @Temporal(TemporalType.TIMESTAMP)
-    @Column(name = "CREATED_AT")
-    private Date createdAt;
+    @Column(name = "CREATED_AT", nullable = false)
+    private LocalDateTime createdAt;
 
     @Column(name = "IMAGE_FILE_NAME")
     private String imageFileName;
 
-    // Getters & Setters chuẩn hóa
+    @Column(name = "STOCK_QUANTITY", nullable = false)
+    private Integer stockQuantity = 0;
 
-    public int getId() { return id; }
-    public void setId(int id) { this.id = id; }
+    // Getters & Setters
 
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public Long getId() {
+        return id;
+    }
 
-    public String getBrand() { return brand; }
-    public void setBrand(String brand) { this.brand = brand; }
+    public void setId(Long id) {
+        this.id = id;
+    }
 
-    public String getCategory() { return category; }
-    public void setCategory(String category) { this.category = category; }
+    public String getName() {
+        return name;
+    }
 
-    public double getPrice() { return price; }
-    public void setPrice(double price) { this.price = price; }
+    public void setName(String name) {
+        this.name = name;
+    }
 
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
+    public String getBrand() {
+        return brand;
+    }
 
-    public Date getCreatedAt() { return createdAt; }
-    public void setCreatedAt(Date createdAt) { this.createdAt = createdAt; }
+    public void setBrand(String brand) {
+        this.brand = brand;
+    }
 
-    public String getImageFileName() { return imageFileName; }
-    public void setImageFileName(String imageFileName) { this.imageFileName = imageFileName; }
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
+    }
+
+    public BigDecimal getPrice() {
+        return price;
+    }
+
+    public void setPrice(BigDecimal price) {
+        this.price = price;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public String getImageFileName() {
+        return imageFileName;
+    }
+
+    public void setImageFileName(String imageFileName) {
+        this.imageFileName = imageFileName;
+    }
+
+    public Integer getStockQuantity() {
+        return stockQuantity;
+    }
+
+    public void setStockQuantity(Integer stockQuantity) {
+        this.stockQuantity = stockQuantity;
+    }
 }
-
-

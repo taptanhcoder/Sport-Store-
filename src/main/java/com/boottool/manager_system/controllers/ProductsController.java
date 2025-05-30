@@ -3,197 +3,227 @@ package com.boottool.manager_system.controllers;
 import com.boottool.manager_system.models.Product;
 import com.boottool.manager_system.models.ProductDto;
 import com.boottool.manager_system.services.ProductsRepository;
+
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
-import org.springframework.validation.FieldError;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.util.Date;
-import java.util.List;
+import java.nio.file.*;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Optional;
 
 @Controller
 @RequestMapping("/products")
 public class ProductsController {
 
-    @Autowired
-    private ProductsRepository repo;
+    private static final DateTimeFormatter FILE_TS =
+            DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
-    @GetMapping({"", "/"})
-    public String showProductList(Model model) {
-        List<Product> products = repo.findAll(Sort.by(Sort.Direction.DESC, "id"));
-        model.addAttribute("products", products);
+    private final Logger logger = LoggerFactory.getLogger(getClass());
+    private final ProductsRepository repo;
+    private final Path uploadPath;
+
+    public ProductsController(
+            ProductsRepository repo,
+            @Value("${app.upload.dir}") String uploadDir
+    ) {
+        this.repo = repo;
+        this.uploadPath = Paths.get(uploadDir);
+    }
+
+    /** ➊ KHAI BÁO CONTEXT CHO MỌI REQUEST — GIÚP IDE HIỂU */
+    @ModelAttribute("productDto")
+    public ProductDto productDto() {
+        return new ProductDto();
+    }
+
+    /* ---------- LIST ---------- */
+    @GetMapping
+    public String list(Model model) {
+        model.addAttribute("products",
+                repo.findAll(Sort.by(Sort.Direction.DESC, "id")));
         return "products/index";
     }
 
+    /* ---------- CREATE (GET) ---------- */
     @GetMapping("/create")
-    public String createProductForm(Model model) {
-        model.addAttribute("productDto", new ProductDto());
-        return "products/CreateProduct";
+    public String showCreate() {
+        return "products/create";   // Không cần addAttribute vì @ModelAttribute đã làm
     }
 
-
-
+    /* ---------- CREATE (POST) ---------- */
     @PostMapping("/create")
-    public String createProduct(
-            @Valid @ModelAttribute("productDto") ProductDto productDto,
-            BindingResult result
+    public String doCreate(
+            @Valid @ModelAttribute("productDto") ProductDto dto,
+            BindingResult result,
+            RedirectAttributes flash
     ) {
 
-        if (productDto.getImageFile() == null || productDto.getImageFile().isEmpty()) {
-            result.addError(new FieldError("productDto", "imageFile", "The image file is required"));
+        /* kiểm tra file bắt buộc */
+        if (dto.getImageFile() == null || dto.getImageFile().isEmpty()) {
+            result.rejectValue("imageFile", null,
+                    "Ảnh sản phẩm là bắt buộc");
         }
 
         if (result.hasErrors()) {
-            System.out.println(result.getAllErrors());
-            return "products/CreateProduct";
+            return "products/create";
         }
 
-
-        MultipartFile image = productDto.getImageFile();
-        Date createdAt = new Date();
-        String storageFileName = createdAt.getTime() + "_" + image.getOriginalFilename();
-
         try {
-            String uploadDir = "D:/manager_system/public/image/";
-            Path uploadPath = Paths.get(uploadDir);
+            MultipartFile file = dto.getImageFile();
+            String filename = LocalDateTime.now().format(FILE_TS)
+                    + "_" + sanitize(file.getOriginalFilename());
 
             if (!Files.exists(uploadPath)) {
                 Files.createDirectories(uploadPath);
             }
-
-            try (InputStream inputStream = image.getInputStream()) {
-                Files.copy(inputStream, uploadPath.resolve(storageFileName),
+            try (InputStream in = file.getInputStream()) {
+                Files.copy(in, uploadPath.resolve(filename),
                         StandardCopyOption.REPLACE_EXISTING);
             }
 
-            System.out.println("Image saved to: " + uploadPath.resolve(storageFileName));
+            /* map DTO → Entity */
+            Product product = new Product();
+            product.setName(dto.getName());
+            product.setBrand(dto.getBrand());
+            product.setCategory(dto.getCategory());
+            product.setPrice(dto.getPrice());
+            product.setDescription(dto.getDescription());
+            product.setCreatedAt(LocalDateTime.now());
+            product.setImageFileName(filename);
+            repo.save(product);
+
+            flash.addFlashAttribute("success", "Tạo sản phẩm thành công!");
+            return "redirect:/products";
 
         } catch (Exception ex) {
-            System.out.println("File upload exception: " + ex.getMessage());
+            logger.error("Lỗi khi tạo sản phẩm", ex);
+            flash.addFlashAttribute("error",
+                    "Không thể tạo sản phẩm: " + ex.getMessage());
+            return "redirect:/products/create";
         }
-
-
-        Product product = new Product();
-        product.setName(productDto.getName());
-        product.setBrand(productDto.getBrand());
-        product.setCategory(productDto.getCategory());
-        product.setPrice(productDto.getPrice());
-        product.setDescription(productDto.getDescription());
-        product.setCreatedAt(createdAt);
-        product.setImageFileName(storageFileName);
-
-        System.out.println("Saving product to DB: " + product.getName());
-        repo.save(product);
-        System.out.println("Save success.");
-
-        return "redirect:/products";
     }
 
+    /* ---------- EDIT (GET) ---------- */
+    @GetMapping("/{id}/edit")
+    public String showEdit(@PathVariable Long id, Model model) {
+        Product product = repo.findById(id)
+                .orElseThrow(() ->
+                        new IllegalArgumentException("Không tìm thấy sản phẩm #" + id));
 
-    @GetMapping("/edit")
-    public String editProductForm(@RequestParam int id, Model model) {
-        Product product = repo.findById(id).orElseThrow(() -> new RuntimeException("Product not found"));
+        ProductDto dto = new ProductDto();
+        dto.setId(product.getId());
+        dto.setName(product.getName());
+        dto.setBrand(product.getBrand());
+        dto.setCategory(product.getCategory());
+        dto.setPrice(product.getPrice());
+        dto.setDescription(product.getDescription());
+        dto.setCreatedAt(product.getCreatedAt());
+        dto.setImageFileName(product.getImageFileName());
 
-        ProductDto productDto = new ProductDto();
-        productDto.setId(product.getId());
-        productDto.setName(product.getName());
-        productDto.setBrand(product.getBrand());
-        productDto.setCategory(product.getCategory());
-        productDto.setPrice(product.getPrice());
-        productDto.setDescription(product.getDescription());
-        productDto.setImageFileName(product.getImageFileName());
-        productDto.setCreatedAt(product.getCreatedAt());
-
-        model.addAttribute("productDto", productDto);
-
-        return "products/EditProduct";
+        model.addAttribute("productDto", dto);
+        return "products/edit";
     }
 
-    @PostMapping("/edit")
-    public String updateProduct(
-            @RequestParam int id,
-            @Valid @ModelAttribute("productDto") ProductDto productDto,
+    /* ---------- EDIT (POST) ---------- */
+    @PostMapping("/{id}/edit")
+    public String doEdit(
+            @PathVariable Long id,
+            @Valid @ModelAttribute("productDto") ProductDto dto,
             BindingResult result,
-            Model model
+            RedirectAttributes flash
     ) {
-        Product product = repo.findById(id).orElseThrow(() -> new RuntimeException("Product not found"));
-
         if (result.hasErrors()) {
-
-            productDto.setImageFileName(product.getImageFileName());
-            productDto.setCreatedAt(product.getCreatedAt());
-
-            model.addAttribute("productDto", productDto);
-            return "products/EditProduct";
+            return "products/edit";
         }
 
+        Product product = repo.findById(id)
+                .orElseThrow(() ->
+                        new IllegalArgumentException("Không tìm thấy sản phẩm #" + id));
 
-        if (productDto.getImageFile() != null && !productDto.getImageFile().isEmpty()) {
-            String uploadDir = "D:/manager_system/public/image/";
-            String oldFileName = product.getImageFileName();
-            Path oldImagePath = Paths.get(uploadDir, oldFileName);
-
-            try {
-                Files.deleteIfExists(oldImagePath);
-            } catch (Exception ex) {
-                System.out.println("Delete old image failed: " + ex.getMessage());
-            }
-
-            MultipartFile newImage = productDto.getImageFile();
-            String newFileName = System.currentTimeMillis() + "_" + newImage.getOriginalFilename();
-
-            try (InputStream inputStream = newImage.getInputStream()) {
-                Files.copy(inputStream, Paths.get(uploadDir, newFileName),
-                        StandardCopyOption.REPLACE_EXISTING);
-                product.setImageFileName(newFileName);
-            } catch (Exception ex) {
-                System.out.println("Upload new image failed: " + ex.getMessage());
-            }
-        }
-
-        product.setName(productDto.getName());
-        product.setBrand(productDto.getBrand());
-        product.setCategory(productDto.getCategory());
-        product.setPrice(productDto.getPrice());
-        product.setDescription(productDto.getDescription());
-
-        repo.save(product);
-
-        return "redirect:/products";
-    }
-
-    @GetMapping("/delete")
-    public String deleteProduct(@RequestParam int id) {
         try {
-            Product product = repo.findById(id).orElseThrow(() -> new RuntimeException("Product not found"));
-
-            Path imagePath = Paths.get("D:/manager_system/public/image/", product.getImageFileName());
-            try {
-                Files.deleteIfExists(imagePath);
-            } catch (Exception ex) {
-                System.out.println("Delete image failed: " + ex.getMessage());
+            /* xử lý ảnh mới (nếu có) */
+            if (dto.getImageFile() != null && !dto.getImageFile().isEmpty()) {
+                if (product.getImageFileName() != null) {
+                    Files.deleteIfExists(uploadPath.resolve(product.getImageFileName()));
+                }
+                MultipartFile file = dto.getImageFile();
+                String filename = LocalDateTime.now().format(FILE_TS)
+                        + "_" + sanitize(file.getOriginalFilename());
+                try (InputStream in = file.getInputStream()) {
+                    Files.copy(in, uploadPath.resolve(filename),
+                            StandardCopyOption.REPLACE_EXISTING);
+                }
+                product.setImageFileName(filename);
             }
 
-            repo.delete(product);
+            /* cập nhật field khác */
+            product.setName(dto.getName());
+            product.setBrand(dto.getBrand());
+            product.setCategory(dto.getCategory());
+            product.setPrice(dto.getPrice());
+            product.setDescription(dto.getDescription());
+
+            repo.save(product);
+            flash.addFlashAttribute("success", "Cập nhật sản phẩm thành công!");
+            return "redirect:/products";
+
         } catch (Exception ex) {
-            System.out.println("Delete product failed: " + ex.getMessage());
+            logger.error("Lỗi khi cập nhật sản phẩm", ex);
+            flash.addFlashAttribute("error",
+                    "Không thể cập nhật sản phẩm: " + ex.getMessage());
+            return "redirect:/products/" + id + "/edit";
+        }
+    }
+
+    /* ---------- DELETE ---------- */
+    @GetMapping("/{id}/delete")
+    public String delete(
+            @PathVariable Long id,
+            RedirectAttributes flash
+    ) {
+        Optional<Product> opt = repo.findById(id);
+        if (opt.isEmpty()) {
+            flash.addFlashAttribute("error",
+                    "Không tìm thấy sản phẩm với ID: " + id);
+            return "redirect:/products";
         }
 
+        try {
+            Product p = opt.get();
+            if (p.getImageFileName() != null &&
+                    !p.getImageFileName().isBlank()) {
+                Files.deleteIfExists(uploadPath.resolve(p.getImageFileName()));
+            }
+            repo.delete(p);
+            flash.addFlashAttribute("success", "Xóa sản phẩm thành công!");
+        } catch (DataIntegrityViolationException ex) {
+            logger.error("Lỗi ràng buộc dữ liệu khi xóa sản phẩm", ex);
+            flash.addFlashAttribute("error",
+                    "Không thể xóa: sản phẩm đang được tham chiếu.");
+        } catch (Exception ex) {
+            logger.error("Lỗi khi xóa sản phẩm", ex);
+            flash.addFlashAttribute("error",
+                    "Xảy ra lỗi: " + ex.getMessage());
+        }
         return "redirect:/products";
     }
 
-
-
+    /* ---------- TIỆN ÍCH ---------- */
+    /** Loại bỏ ký tự nguy hiểm khỏi tên file. */
+    private static String sanitize(String original) {
+        return original == null ? "file"
+                : original.replaceAll("[^a-zA-Z0-9_.-]", "_");
+    }
 }
-
-
